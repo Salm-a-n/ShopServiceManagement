@@ -1,114 +1,95 @@
 "use client";
-import { useState } from "react";
 
-// Define a union type for notifications
-type Notification =
-  | {
-      id: number;
-      type: "reply";
-      question: string;
-      reply: string | null;
-      date: string;
+import { useState, useEffect } from "react";
+
+interface Notification {
+  id: number;
+  title: string;
+  message: string;
+  created_at: string;
+  replies?: {
+    id: number;
+    sender: { username: string };
+    message: string;
+    created_at: string;
+  }[];
+}
+
+export default function UserNotificationsPage() {
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [user_token, setToken] = useState<string | null>(null);
+
+  // token from localStorage
+  useEffect(() => {
+    const savedToken = localStorage.getItem("user_token");
+    setToken(savedToken);
+  }, []);
+
+  // Fetch admin notifications
+  const fetchNotifications = async () => {
+    if (!user_token) return;
+
+    try {
+      setLoading(true);
+      const res = await fetch("http://127.0.0.1:8000/api/notifications/admin", {
+        headers: {
+          Authorization: `Bearer ${user_token}`,
+          Accept: "application/json",
+        },
+      });
+      const data = await res.json();
+      setNotifications(data || []);
+    } catch (error) {
+      console.error("Failed to fetch notifications:", error);
+    } finally {
+      setLoading(false);
     }
-  | {
-      id: number;
-      type: "alert";
-      message: string;
-      date: string;
-    };
-
-export default function NotificationsPage() {
-  const [notifications, setNotifications] = useState<Notification[]>([
-    {
-      id: 1,
-      type: "reply",
-      question: "Is my phone repair available?",
-      reply: "Yes, your phone is ready for pickup.",
-      date: "2026-01-28",
-    },
-    {
-      id: 2,
-      type: "alert",
-      message: "Product ready for pickup",
-      date: "2026-01-30",
-    },
-  ]);
-
-  const [question, setQuestion] = useState("");
-
-  const handleSubmit = () => {
-    if (!question.trim()) return;
-
-    const newNote: Notification = {
-      id: notifications.length + 1,
-      type: "reply",
-      question,
-      reply: null, // reply will be filled by admin later
-      date: new Date().toISOString().split("T")[0],
-    };
-
-    // ✅ Use functional update to avoid stale state issues
-    setNotifications((prev) => [newNote, ...prev]);
-    setQuestion("");
   };
+
+  useEffect(() => {
+    fetchNotifications();
+  }, [user_token]);
 
   return (
     <div className="pt-28 px-6 min-h-screen bg-gray-50">
-      {/* Heading */}
-      <h2 className="text-3xl font-bold text-indigo-600 mb-2">Notifications</h2>
-      <p className="text-gray-600 mb-6">
-        Ask questions and view replies from workers/admin
-      </p>
+      <h2 className="text-3xl font-bold text-indigo-600 mb-6">
+        Admin Notifications
+      </h2>
 
-      {/* Ask Question Form */}
-      <div className="bg-white shadow-md rounded-lg p-4 mb-6">
-        <label className="block text-sm font-semibold text-gray-700 mb-2">
-          Ask a Question
-        </label>
-        <textarea
-          value={question}
-          onChange={(e) => setQuestion(e.target.value)}
-          placeholder="Type your question here..."
-          rows={3}
-          className="w-full border rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 resize-none"
-        />
-        <button
-          onClick={handleSubmit}
-          className="mt-3 px-6 py-2 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition"
-        >
-          Submit
-        </button>
-      </div>
+      {loading && <p className="text-gray-500 text-center">Loading notifications...</p>}
 
-      {/* Notifications List */}
-      {notifications.length > 0 ? (
-        <ul className="space-y-4">
-          {notifications.map((note) => (
-            <li
-              key={note.id}
-              className="bg-white shadow-md rounded-lg p-4 space-y-2"
-            >
-              {note.type === "reply" ? (
-                <>
-                  <div className="text-sm text-gray-800">
-                    <span className="font-semibold">You asked:</span>{" "}
-                    {note.question}
-                  </div>
-                  <div className="text-sm text-gray-700 bg-gray-100 p-2 rounded-md">
-                    <span className="font-semibold">Reply:</span>{" "}
-                    {note.reply || "Awaiting reply from worker/admin"}
-                  </div>
-                </>
-              ) : (
-                <div className="text-sm text-gray-800">{note.message}</div>
-              )}
-              <div className="text-xs text-gray-500 text-right">{note.date}</div>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="text-gray-500">No notifications yet</p>
+      {!loading && notifications.length === 0 && (
+        <p className="text-gray-500 text-center">No notifications yet.</p>
       )}
+
+      <div className="flex flex-col gap-4">
+        {notifications.map((n) => (
+          <div key={n.id} className="p-4 rounded-lg border border-gray-200 bg-white shadow-sm">
+            <h3 className="font-semibold text-lg text-indigo-700">{n.title}</h3>
+            <p className="text-gray-700 mt-1">{n.message}</p>
+            <p className="text-gray-400 text-sm mt-1">
+              {new Date(n.created_at).toLocaleString()}
+            </p>
+
+            {n.replies && n.replies.length > 0 && (
+              <div className="mt-2 ml-4 border-l-2 border-indigo-200 pl-4 flex flex-col gap-2">
+                {n.replies.map((r) => (
+                  <div key={r.id} className="bg-indigo-50 p-2 rounded">
+                    <p className="text-gray-700 font-medium">
+                      {r.sender.username} replied:
+                    </p>
+                    <p className="text-gray-600">{r.message}</p>
+                    <p className="text-gray-400 text-xs">
+                      {new Date(r.created_at).toLocaleString()}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

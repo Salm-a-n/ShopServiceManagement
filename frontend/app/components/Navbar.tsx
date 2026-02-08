@@ -1,23 +1,66 @@
+
+
 "use client";
+
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { ProfileEditModal } from "@/app/components/ProfileEditModal";
 
 export default function Navbar({ role }: { role: "user" | "admin" | "worker" }) {
   const [scrolled, setScrolled] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
 
-  // Example notifications (replace with API data)
-  const notifications = [
-    "Your phone repair is complete",
-    "Worker replied to your complaint",
-    "Product ready for pickup",
-  ];
+  // ⚡ Client-only states
+  const [mounted, setMounted] = useState(false);
+  const [user, setUser] = useState<any>(null);
+  const [user_token, setToken] = useState<string | null>(null);
+  const [showProfileModal, setShowProfileModal] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    const savedUser = localStorage.getItem("user_data");
+    const savedToken = localStorage.getItem("user_token");
+    if (savedUser) setUser(JSON.parse(savedUser));
+    if (savedToken) setToken(savedToken);
+  }, []);
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 20);
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
+
+  // Logout
+  const handleLogout = async () => {
+    if (!user_token) return alert("No token found");
+
+    try {
+      const res = await fetch("http://127.0.0.1:8000/api/logout", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${user_token}`, Accept: "application/json" },
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        alert(data.message || "Logged out successfully");
+      } else alert("Logout failed");
+
+      localStorage.removeItem("user_token");
+      localStorage.removeItem("user_data");
+      window.location.href = "/login";
+    } catch (err) {
+      console.error(err);
+      alert("Logout request failed");
+    }
+  };
+
+  const notifications = [
+    "Your phone repair is complete",
+    "Worker replied to your complaint",
+    "Product ready for pickup",
+  ];
+
+  if (!mounted) return null; // prevent SSR errors
 
   return (
     <nav
@@ -35,60 +78,34 @@ export default function Navbar({ role }: { role: "user" | "admin" | "worker" }) 
           >
             My Services
           </Link>
-          <Link
-            href="/user/profile"
+
+          <button
+            onClick={() => setShowProfileModal(true)}
             className="px-4 py-2 rounded-md bg-gray-800 text-white hover:bg-gray-700 transition shadow-md font-medium"
           >
             Profile
-          </Link>
-
-          {/* Notification Bell */}
-          <button
-            onClick={() => setShowNotifications(!showNotifications)}
-            className="relative px-4 py-2 rounded-md bg-gray-800 text-white hover:bg-gray-700 transition shadow-md font-medium"
-          >
-            🔔
-            {notifications.length > 0 && (
-              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full px-2">
-                {notifications.length}
-              </span>
-            )}
           </button>
 
-          {/* Dropdown */}
-          {showNotifications && (
-            <div className="absolute right-0 top-12 bg-white shadow-lg rounded-lg w-64 p-4 z-50">
-              <h3 className="text-sm font-semibold text-indigo-600 mb-2">
-                Notifications
-              </h3>
-              {notifications.length > 0 ? (
-                <ul className="space-y-2">
-                  {notifications.map((note, idx) => (
-                    <li
-                      key={idx}
-                      className="text-sm text-gray-700 bg-gray-100 p-2 rounded-md"
-                    >
-                      {note}
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-sm text-gray-500">No notifications</p>
-              )}
-              <Link
-                href="/user/notifications"
-                onClick={() => setShowNotifications(false)} // 👈 closes dropdown
-                className="block mt-3 text-sm text-indigo-600 hover:underline"
-              >
-                View all
-              </Link>
-            </div>
-          )}
-
-          <button className="px-4 py-2 rounded-md bg-red-500 hover:bg-red-600 text-white font-medium shadow-md transition">
+          <button
+            onClick={handleLogout}
+            className="px-4 py-2 rounded-md bg-red-500 hover:bg-red-600 text-white font-medium shadow-md transition"
+          >
             Logout
           </button>
         </div>
+      )}
+
+      {/* Profile Modal */}
+      {showProfileModal && user && (
+        <ProfileEditModal
+          user={user}
+          apiBase="http://127.0.0.1:8000/api"
+          onClose={() => setShowProfileModal(false)}
+          onUpdated={(updatedUser) => {
+            setUser(updatedUser);
+            localStorage.setItem("user", JSON.stringify(updatedUser));
+          }}
+        />
       )}
     </nav>
   );

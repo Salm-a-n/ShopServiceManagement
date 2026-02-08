@@ -1,4 +1,7 @@
+
 "use client";
+
+import { useEffect, useMemo, useState } from "react";
 
 export default function ServiceModal({
   service,
@@ -7,101 +10,116 @@ export default function ServiceModal({
   service: any;
   onClose: () => void;
 }) {
-  if (!service) return null;
+  const [currentService, setCurrentService] = useState<any>(service);
+  const [message, setMessage] = useState("");
+  const [sending, setSending] = useState(false);
+
+  const token = typeof window !== "undefined" ? localStorage.getItem("user_token") : null;
+
+  useEffect(() => {
+    setCurrentService(service);
+  }, [service]);
+
+  const messages = useMemo(() => {
+    if (!currentService) return [];
+    const userMsgs = currentService.user_questions?.map((q: any) => ({
+      sender: "user", text: q.message, time: q.time,
+    })) || [];
+    const workerMsgs = currentService.worker_answers?.map((a: any) => ({
+      sender: "worker", text: a.message, time: a.time,
+    })) || [];
+
+    return [...userMsgs, ...workerMsgs].sort(
+      (a, b) => new Date(a.time).getTime() - new Date(b.time).getTime()
+    );
+  }, [currentService]);
+
+  const sendMessage = async () => {
+    if (!message.trim()) return;
+    try {
+      setSending(true);
+      const res = await fetch(`http://127.0.0.1:8000/api/works/${service.id}/question`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({ question: message }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        alert(err.message || "Failed to send message");
+        return;
+      }
+
+      setMessage("");
+      alert("Question sent successfully!");
+      onClose(); // This triggers the refresh in the parent page
+    } catch (err) {
+      console.error(err);
+      alert("Something went wrong");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  if (!currentService) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-      <div className="bg-white p-8 rounded-2xl w-full max-w-2xl shadow-2xl relative overflow-y-auto max-h-[90vh]">
-        {/* Header */}
-        <div className="flex justify-between items-center border-b pb-4 mb-4">
-          <h2 className="text-2xl font-bold text-indigo-600">{service.type}</h2>
-          <button
-            onClick={onClose}
-            className="text-gray-500 hover:text-gray-700 transition"
-          >
-            ✕
-          </button>
-        </div>
-
-        {/* Service Details */}
-        <div className="grid grid-cols-2 gap-4 mb-6">
-          <p className="text-sm text-gray-600">
-            <span className="font-semibold">ID:</span> {service.id}
-          </p>
-          <p className="text-sm text-gray-600">
-            <span className="font-semibold">Status:</span> {service.status}
-          </p>
-          <p className="text-sm text-gray-600">
-            <span className="font-semibold">Date:</span> {service.date}
-          </p>
-
-          {/* Device Info */}
-          <p className="text-sm text-gray-600 col-span-2">
-            <span className="font-semibold">Device:</span> {service.deviceName} (
-            {service.deviceModel})
-          </p>
-
-          {/* Worker Info */}
-          <p className="text-sm text-gray-600 col-span-2">
-            <span className="font-semibold">Worker:</span>{" "}
-            {service.workerName || service.workerId}
-          </p>
-
-          <p className="text-sm text-gray-600 col-span-2">
-            <span className="font-semibold">Complaint:</span> {service.complaint}
-          </p>
-        </div>
-
-        {/* Complaint/Doubt Section */}
-        <div className="space-y-4 mb-6">
-          <label className="block font-semibold text-gray-700">
-            Add Complaint/Doubt
-          </label>
-          <textarea
-            className="border p-3 w-full rounded-lg focus:ring-2 focus:ring-indigo-500 resize-none"
-            rows={4}
-            placeholder="Write your complaint or doubt..."
-          />
+    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+      <div className="bg-white w-full max-w-4xl h-[85vh] rounded-2xl flex flex-col overflow-hidden shadow-2xl">
+        {/* HEADER */}
+        <div className="p-6 border-b flex justify-between items-start bg-white">
           <div>
-            <label className="block font-semibold text-gray-700 mb-2">
-              Attach File
-            </label>
-            <input
-              type="file"
-              className="border p-2 w-full rounded-lg cursor-pointer focus:ring-2 focus:ring-indigo-500"
-            />
+            <h2 className="text-2xl font-bold text-indigo-600">{currentService.complaint}</h2>
+            <p className="text-gray-600">{currentService.brand} • {currentService.model}</p>
+            <p className="text-sm mt-1">Status: <span className="font-bold text-indigo-500">{currentService.status}</span></p>
           </div>
-          <button className="w-full bg-indigo-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-indigo-700 transition shadow-md">
-            Submit
-          </button>
+          <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-full transition">✕</button>
         </div>
 
-        {/* Reply Section (Worker/Admin response to complaint) */}
-        <div className="border-t pt-4 space-y-3">
-          <h3 className="text-lg font-semibold text-indigo-600">Reply from Worker</h3>
-          {service.replies && service.replies.length > 0 ? (
-            <ul className="space-y-2">
-              {service.replies.map((reply: string, idx: number) => (
-                <li
-                  key={idx}
-                  className="text-sm text-gray-700 bg-gray-100 p-2 rounded-lg"
-                >
-                  {reply}
-                </li>
-              ))}
-            </ul>
+        {/* DETAILS */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-6 border-b text-sm bg-gray-50">
+          <p><b>Expected Delivery:</b> {currentService.expected_delivery ?? "—"}</p>
+          <p><b>Price:</b> {currentService.price ? `₹${currentService.price}` : "Not updated"}</p>
+          <p>
+            <b>Worker:</b>{" "}
+            <span className={currentService.worker ? "text-indigo-600 font-medium" : "text-gray-500"}>
+              {currentService.worker 
+      ? (currentService.worker.username || currentService.worker.name || "Assigned") 
+      : "Not assigned"}
+            </span>
+          </p>
+          <p><b>Created At:</b> {new Date(currentService.created_at).toLocaleString()}</p>
+        </div>
+
+        {/* CHAT AREA */}
+        <div className="flex-1 overflow-y-auto p-6 bg-gray-100 space-y-4">
+          {messages.length === 0 ? (
+            <p className="text-center text-gray-400 italic mt-10 text-sm">No messages yet. Ask the worker a question.</p>
           ) : (
-            <p className="text-sm text-gray-500">No replies yet</p>
+            messages.map((m, i) => (
+              <div key={i} className={`max-w-[75%] px-4 py-2 rounded-2xl text-sm shadow-sm ${m.sender === "user" ? "ml-auto bg-indigo-600 text-white rounded-tr-none" : "bg-white border text-gray-800 rounded-tl-none"}`}>
+                {m.text}
+                <div className="text-[10px] mt-1 opacity-70">{new Date(m.time).toLocaleTimeString()}</div>
+              </div>
+            ))
           )}
         </div>
 
-        {/* Footer */}
-        <div className="mt-6 flex justify-end">
-          <button
-            onClick={onClose}
-            className="px-6 py-2 rounded-lg bg-gray-500 text-white font-medium hover:bg-gray-600 transition"
-          >
-            Close
+        {/* INPUT */}
+        <div className="p-4 border-t flex gap-2 bg-white">
+          <input
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
+            className="flex-1 border rounded-xl px-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none"
+            placeholder="Type your question..."
+          />
+          <button onClick={sendMessage} disabled={sending || !message.trim()} className="bg-indigo-600 hover:bg-indigo-700 text-white px-8 rounded-xl font-semibold transition disabled:opacity-50">
+            {sending ? "Sending..." : "Send"}
           </button>
         </div>
       </div>

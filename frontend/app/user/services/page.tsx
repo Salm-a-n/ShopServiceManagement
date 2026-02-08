@@ -1,75 +1,119 @@
+
 "use client";
-import { useState, useEffect } from "react";
+
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { services } from "@/app/data/services";
 import ServiceCard from "@/app/components/ServiceCard";
 import ServiceModal from "@/app/components/ServiceModal";
 import Pagination from "@/app/components/pagination";
+import SendToAdminModal from "@/app/components/SendToAdminModal";
 
 export default function MyServices() {
+  const [services, setServices] = useState<any[]>([]);
   const [selected, setSelected] = useState<any>(null);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
-  const perPage = 2;
+  const [totalPages, setTotalPages] = useState(1);
+  const [loading, setLoading] = useState(false);
+  const [user_token, setToken] = useState<string | null>(null);
+  const [showAdminModal, setShowAdminModal] = useState(false);
 
-  // Filter services by search
-  const filtered = services.filter(
-    (s) =>
-      s.id.toLowerCase().includes(search.toLowerCase()) ||
-      s.type.toLowerCase().includes(search.toLowerCase())
-  );
+  const perPage = 6;
 
-  // Paginate services
-  const paginated = filtered.slice((page - 1) * perPage, page * perPage);
-
-  // Prevent background scroll when modal is open
   useEffect(() => {
-    document.body.style.overflow = selected ? "hidden" : "auto";
-  }, [selected]);
+    const savedToken = localStorage.getItem("user_token");
+    setToken(savedToken);
+  }, []);
+  const fetchServices = useCallback(async () => {
+    if (!user_token) return;
+
+    try {
+      setLoading(true);
+      const res = await fetch(
+        `http://127.0.0.1:8000/api/user/works?page=${page}&search=${search}&per_page=${perPage}`,
+        {
+          headers: {
+            Authorization: `Bearer ${user_token}`,
+            Accept: "application/json",
+          },
+        }
+      );
+
+      const data = await res.json();
+      setServices(data.data || []);
+      setTotalPages(data.last_page || 1);
+    } catch (error) {
+      console.error("Failed to fetch services", error);
+    } finally {
+      setLoading(false);
+    }
+  }, [page, search, user_token]);
+
+  useEffect(() => {
+    fetchServices();
+  }, [fetchServices]);
+
+  useEffect(() => {
+    document.body.style.overflow = selected || showAdminModal ? "hidden" : "auto";
+  }, [selected, showAdminModal]);
 
   return (
     <div className="pt-28 px-6 min-h-screen bg-gray-50">
-      {/* Header with right-aligned button */}
       <div className="flex justify-between items-center mb-6">
         <div>
           <h2 className="text-3xl font-bold text-indigo-600">My Services</h2>
           <p className="text-gray-600">Track and manage your service history</p>
         </div>
-        <Link
-          href="/user/notifications"
-          className="px-6 py-2 rounded-lg bg-indigo-600 text-white font-semibold shadow-md hover:bg-indigo-700 transition"
-        >
-          View Notifications
-        </Link>
+        <div className="flex gap-3">
+          <Link href="/user/notifications" className="px-6 py-2 rounded-lg bg-indigo-600 text-white font-semibold shadow-md hover:bg-indigo-700 transition">
+            View Notifications
+          </Link>
+          <Link href="/user/all-services" className="px-6 py-2 rounded-lg bg-indigo-600 text-white font-semibold shadow-md hover:bg-indigo-700 transition">
+           Available services
+            </Link>
+          <button onClick={() => setShowAdminModal(true)} className="px-6 py-2 rounded-lg bg-green-600 text-white font-semibold shadow-md hover:bg-green-700 transition">
+            Message Admin
+          </button>
+        </div>
       </div>
 
-      {/* Search */}
       <input
-        placeholder="Search by Service ID or Model"
+        placeholder="Search by brand, model, or complaint"
         className="w-full mb-6 px-4 py-3 border rounded-lg focus:ring-2 focus:ring-indigo-500"
-        onChange={(e) => setSearch(e.target.value)}
+        value={search}
+        onChange={(e) => { setPage(1); setSearch(e.target.value); }}
       />
 
-      {/* Services Grid */}
+      {loading && <p className="text-center text-gray-500">Loading services...</p>}
+      {!loading && services.length === 0 && <p className="text-center text-gray-500">No services found.</p>}
+
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        {paginated.map((service) => (
-          <ServiceCard
-            key={service.id}
-            service={service}
-            onClick={() => setSelected(service)}
-          />
+        {services.map((service) => (
+          <ServiceCard key={service.id} service={service} onClick={() => setSelected(service)} />
         ))}
       </div>
 
-      {/* Pagination */}
-      <Pagination
-        currentPage={page}
-        totalPages={Math.max(1, Math.ceil(filtered.length / perPage))}
-        onPageChange={setPage}
-      />
+      <Pagination currentPage={page} totalPages={totalPages} onPageChange={setPage} />
 
-      {/* Modal */}
-      <ServiceModal service={selected} onClose={() => setSelected(null)} />
+    
+      {selected && (
+        <ServiceModal 
+          service={selected} 
+          onClose={() => {
+            setSelected(null);
+            fetchServices(); 
+          }} 
+        />
+      )}
+
+      {showAdminModal && (
+        <SendToAdminModal 
+          onClose={() => {
+            setShowAdminModal(false);
+            fetchServices();
+          }} 
+        />
+      )}
     </div>
   );
 }
